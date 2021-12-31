@@ -1,2 +1,7 @@
 /target
 tmp
+/**/.gdb*
+/**/peda*
+/**/*.o
+/**/*.bin
+/**/*.d

@@ -1,6 +1,8 @@
 use clap::{App, Arg};
-use std::fs::File;
-use std::path::Path;
+use std::fs;
+mod asm;
+
+use asm::Asm;
 
 fn main() {
     let app = App::new("rjit")
@@ -9,26 +11,28 @@ fn main() {
         .about("A toy x86 JIT Compiler.")
         .arg(
             Arg::with_name("file")
-                .value_name("FILE_NAME")
-                .help("specify the input file.")
-                .multiple(true)
+                .short("f")
+                .long("file")
+                .takes_value(true)
+                .required(true)
+                .help("The input file"),
         );
 
     let matches = app.get_matches();
 
-    let path;
-    if let Some(file ) = matches.value_of("file") {
-        path = Path::new(file);
-    } else {
-        panic!("-file flag required.");
+    let path = matches
+        .value_of("file")
+        .unwrap_or_else(|| panic!("file flag not found."));
+
+    let input = match fs::read_to_string(&path) {
+        Ok(asm) => asm,
+        Err(e) => panic!("wrong, path: {:?}. err: {}", &path, e),
     };
 
-    let mut file = match File::open(&path) {
-        Err(e) => panic!("couldn't open {}: ", e),
-        Ok(file) => file,
-    };
+    println!("asm: {}", input);
 
-    println!("meta: {:?}", file.metadata());
+    let asm = Asm::new(input);
+    asm.list();
 }
 
 #[cfg(test)]
