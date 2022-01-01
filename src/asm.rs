@@ -1,19 +1,18 @@
-
 pub struct Asm {
-    input :String,
+    input: String,
     asm: Vec<String>,
 }
 
 impl Asm {
-    pub fn new(input: String) -> Self{
-        let asm  = input
+    pub fn new(input: String) -> Self {
+        let asm = input
             .split(|c| c == '\n' || c == ';')
             .map(|s| s.to_string())
             .collect();
         return Self {
             input: input,
-            asm: asm
-        }
+            asm: asm,
+        };
     }
     pub fn list(&self) {
         for l in self.asm.iter() {

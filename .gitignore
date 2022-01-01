@@ -5,3 +5,4 @@ tmp
 /**/*.o
 /**/*.bin
 /**/*.d
+.DS_Store
