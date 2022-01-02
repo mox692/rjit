@@ -1,5 +1,6 @@
 /target
 tmp
+tmp*
 /**/.gdb*
 /**/peda*
 /**/*.o

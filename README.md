@@ -6,3 +6,8 @@ I created this for learning concept of JIT.
 * While running rjit, it reads each function of asm and tranlate it to x86 binary code.
 * Then, switching to execution of binary code until encounter not compiled code.
 * Saving the context, switching to jit again.
+
+### supported assembly syntax
+- [ ] nop
+- [ ] add
+- [ ] sub
