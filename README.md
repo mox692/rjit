@@ -1,5 +1,5 @@
-rjit is a toy x86-64 JIT Compiler written in Rust.
-I created this for learning concept of JIT.
+rjit is a toy runtime assembler written in Rust.
+I created this for learning x86 machine-code and concept of runtime compile, ex: JIT.
 
 ### current plan
 * rjit reads x86 assembly as a input.
