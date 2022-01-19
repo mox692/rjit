@@ -1,13 +1,14 @@
 rjit is a toy runtime assembler written in Rust.
-I created this for learning x86 machine-code and concept of runtime compile, ex: JIT.
+By using this, you can test the assembly directly without linking process.
 
-### current plan
-* rjit reads x86 assembly as a input.
-* While running rjit, it reads each function of asm and tranlate it to x86 binary code.
-* Then, switching to execution of binary code until encounter not compiled code.
-* Saving the context, switching to jit again.
+### restriction
+* input is one assembly(.s) file.
+* no libc support.
+  * but I'm thinking of adding my own implementation for libc that doesn't need the linking process. (ex: printf, malloc, etc...)
 
 ### supported assembly syntax
+wip...
 - [ ] nop
 - [ ] add
 - [ ] sub
+- [ ] mov

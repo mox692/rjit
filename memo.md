@@ -32,3 +32,16 @@
     * 入力ファイルを、断片だけのマシン語ファイルにする(.oだと、ごみがたくさん)
     * gdbの--argsとかを用いてひたすらdebugging
   * [追記] nopだけのファイル、nop.binをmmmapしてそこにjmpすることに成功した
+
+* むし
+  * 8bit operand
+
+* 1/18
+  * 参考資料
+    * https://defuse.ca/online-x86-assembler.htm#disassembly
+    * https://tanakamura.github.io/pllp/docs/x8664_language.html
+    * http://ref.x86asm.net/coder64.html#x0F6A
+      * このサイトにおいて、mov %rdi, (%rax) とした時,
+        * op1 -> (%rax)
+        * op2 -> %rdi
+      * mov r16/32/64	imm16/32/64 を処理する時、opecodeがB8+rって表示されたけど、このrはレジスタ番号？みたい
