@@ -1,7 +1,5 @@
 use libc::{mmap, MAP_ANONYMOUS, MAP_PRIVATE, PROT_EXEC, PROT_READ, PROT_WRITE};
-use std::{
-    ptr::{self},
-};
+use std::ptr::{self};
 
 pub struct Assembler {
     input: String,
@@ -244,7 +242,7 @@ fn parse_mov(instruction: Instruction) -> Vec<u8> {
                     | Bit::Double => {
                         reg_bit_cp = Bit::Double;
                         vec![0x48, 0xc7, 0xc0 + reg.index()]
-                    } 
+                    }
                     | Bit::Quad => vec![0x48, 0xb8 + reg.index()],
                     | _ => panic!("Not impement."),
                 },
@@ -266,6 +264,24 @@ fn parse_mov(instruction: Instruction) -> Vec<u8> {
                 | _ => panic!("not implemented."),
             };
             code.append(&mut imm)
+        }
+
+        | RMImmType::R_Rm(reg_bit) => {
+            let mut op_code: Vec<u8> = match reg_bit {
+                | Bit::Double => vec![0x89],
+                | Bit::Quad => vec![0x48, 0x89],
+                | _ => panic!("Not implement."),
+            };
+            code.append(&mut op_code);
+
+            let first_reg = Register::from_operand(instruction.first_op);
+            let second_reg = Register::from_operand(instruction.second_op);
+            let m: u8 = 0b11;
+            let reg = second_reg.index(); // 演算結果を格納する方のreg
+            let rm = first_reg.index(); // 格納する方
+            let modrm = reg | rm << 3 | m << 6;
+
+            code.append(&mut vec![modrm]);
         }
         | _ => panic!("Not implemet."),
     }
@@ -408,6 +424,22 @@ mod tests {
             AssembleTestCase {
                 input: "mov $0x11223344, %rax".to_string(),
                 expect: vec![0x48, 0xc7, 0xc0, 0x44, 0x33, 0x22, 0x11],
+            },
+            AssembleTestCase {
+                input: "mov %rax, %rax".to_string(),
+                expect: vec![0x48, 0x89, 0xc0],
+            },
+            AssembleTestCase {
+                input: "mov %eax, %eax".to_string(),
+                expect: vec![0x89, 0xc0],
+            },
+            AssembleTestCase {
+                input: "mov %eax, %edx".to_string(),
+                expect: vec![0x89, 0xc2],
+            },
+            AssembleTestCase {
+                input: "mov   %rdx, %rax".to_string(),
+                expect: vec![0x48, 0x89, 0xd0],
             },
         ];
         for t in test_case {
