@@ -155,6 +155,7 @@ pub enum InstructionType {
     Mov,
     Add,
     Sub,
+    Int,
     Unknown,
 }
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -180,6 +181,12 @@ impl Operand {
     fn imm_from_operand_u16(operand: Operand) -> u16 {
         match operand {
             | Operand::Imm(i) => i as u16,
+            | _ => panic!("operand {:?} is not imm.", operand),
+        }
+    }
+    fn imm_from_operand_u8(operand: Operand) -> u8 {
+        match operand {
+            | Operand::Imm(i) => i as u8,
             | _ => panic!("operand {:?} is not imm.", operand),
         }
     }
@@ -213,6 +220,7 @@ pub fn assemble(input: String) -> Vec<u8> {
         | InstructionType::Ret => parse_ret(instruction),
         | InstructionType::Add => parse_add(instruction),
         | InstructionType::Mov => parse_mov(instruction),
+        | InstructionType::Int => parse_int(instruction),
         | _ => panic!("unimplement."),
     }
 }
@@ -239,7 +247,7 @@ fn parse_mov(instruction: Instruction) -> Vec<u8> {
                 | Bit::Quad => match imm_bit {
                     // レジスタは64bitで指定してあるが、即値が32bitで収まる値だった場合、
                     // 即値を4byteでエンコードする.
-                    | Bit::Double => {
+                    | Bit::Double | Bit::Byte => {
                         reg_bit_cp = Bit::Double;
                         vec![0x48, 0xc7, 0xc0 + reg.index()]
                     }
@@ -288,19 +296,26 @@ fn parse_mov(instruction: Instruction) -> Vec<u8> {
 
     return code;
 }
+fn parse_int(instruction: Instruction) -> Vec<u8> {
+    let immediate = Operand::imm_from_operand_u8(instruction.first_op);
+    return vec![0xcd, immediate]
+}
 
 fn parse_instruction(tok: Vec<String>) -> Instruction {
+    let tok_len = tok.len();
+
     let typ: InstructionType = match tok[0].as_str() {
         | "nop" => InstructionType::Nop,
         | "ret" => InstructionType::Ret,
         | "mov" => InstructionType::Mov,
         | "add" => InstructionType::Add,
         | "sub" => InstructionType::Sub,
+        | "int" => InstructionType::Int,
         | _ => panic!("Unknown Instruction, {:?}", tok[0].as_str()),
     };
 
     // instruction which does not take an operand.
-    if tok.len() == 1 {
+    if tok_len == 1 {
         return Instruction {
             typ: typ,
             rmimm_type: RMImmType::Other,
@@ -309,15 +324,24 @@ fn parse_instruction(tok: Vec<String>) -> Instruction {
         };
     }
 
-    // instruction which does take an operand.
     let mut operands: Vec<Operand> = vec![];
     for s in tok.iter().cloned().skip(1) {
         let operand = parse_operand(s);
         operands.push(operand);
     }
 
-    let rmimm_type = get_rmimm_type(operands.clone());
+    // instruction which takes one operand.
+    if tok_len == 2 {
+        return Instruction {
+            typ: typ,
+            rmimm_type: RMImmType::Other,
+            first_op: operands[0].clone(),
+            second_op: Operand::None,
+        };
+    }
 
+    // instruction which takes two operands.
+    let rmimm_type = get_rmimm_type(operands.clone());
     return Instruction {
         typ: typ,
         rmimm_type: rmimm_type,
@@ -440,6 +464,10 @@ mod tests {
             AssembleTestCase {
                 input: "mov   %rdx, %rax".to_string(),
                 expect: vec![0x48, 0x89, 0xd0],
+            },
+            AssembleTestCase {
+                input: "int $0x80".to_string(),
+                expect: vec![0xcd, 0x80],
             },
         ];
         for t in test_case {
