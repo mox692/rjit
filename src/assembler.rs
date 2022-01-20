@@ -1,5 +1,7 @@
 use libc::{mmap, MAP_ANONYMOUS, MAP_PRIVATE, PROT_EXEC, PROT_READ, PROT_WRITE};
-use std::ptr::{self};
+use std::{
+    ptr::{self},
+};
 
 pub struct Assembler {
     input: String,
@@ -74,6 +76,22 @@ pub enum Bit {
     Double,
     Quad,
 }
+impl Bit {
+    fn to_bit(i: u64) -> Self {
+        if i >> 7 == 0 {
+            return Bit::Byte;
+        } else if i >> 15 == 0 {
+            return Bit::Word;
+        } else if i >> 31 == 0 {
+            return Bit::Double;
+        } else if i >> 63 == 0 {
+            return Bit::Quad;
+        } else {
+            panic!("fail to Bit, input: {}", i)
+        }
+    }
+}
+
 // Rm  -> register memory
 // R   -> regisger
 // Imm -> immediate
@@ -81,7 +99,7 @@ pub enum Bit {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum RMImmType {
     // op1_op2 (ref: http://ref.x86asm.net/coder64.html#x0F6A)
-    Imm_R(Bit),
+    Imm_R(Bit, Bit), // first: Imm substantial bit, second: register bit.
     Rm_R(Bit),
     R_Rm(Bit),
     Other,
@@ -92,6 +110,11 @@ pub enum Register {
     Ecx,
     Edx,
     Ebx,
+
+    Rax,
+    Rcx,
+    Rdx,
+    Rbx,
 }
 impl Register {
     fn from_operand(operand: Operand) -> Self {
@@ -100,20 +123,30 @@ impl Register {
             | _ => panic!("operand {:?} is not register.", operand),
         }
     }
-    fn index(&self) -> usize {
+    fn index(&self) -> u8 {
         match self {
             | Register::Eax => 0,
             | Register::Ecx => 1,
             | Register::Edx => 2,
             | Register::Ebx => 3,
+
+            | Register::Rax => 0,
+            | Register::Rcx => 1,
+            | Register::Rdx => 2,
+            | Register::Rbx => 3,
         }
     }
     fn get_bit(&self) -> Bit {
         match self {
-            | Eax => Bit::Double,
-            | Ecx => Bit::Double,
-            | Edx => Bit::Double,
-            | Ebx => Bit::Double,
+            | Register::Eax => Bit::Double,
+            | Register::Ecx => Bit::Double,
+            | Register::Edx => Bit::Double,
+            | Register::Ebx => Bit::Double,
+
+            | Register::Rax => Bit::Quad,
+            | Register::Rcx => Bit::Quad,
+            | Register::Rdx => Bit::Quad,
+            | Register::Rbx => Bit::Quad,
         }
     }
 }
@@ -134,6 +167,12 @@ pub enum Operand {
     None,
 }
 impl Operand {
+    fn imm_from_operand_u64(operand: Operand) -> u64 {
+        match operand {
+            | Operand::Imm(i) => i as u64,
+            | _ => panic!("operand {:?} is not imm.", operand),
+        }
+    }
     fn imm_from_operand_u32(operand: Operand) -> u32 {
         match operand {
             | Operand::Imm(i) => i as u32,
@@ -190,29 +229,38 @@ fn parse_add(input: Instruction) -> Vec<u8> {
     return vec![];
 }
 fn parse_mov(instruction: Instruction) -> Vec<u8> {
-    // AssembleTestCase{
-    //     input: "mov	$0x11223344, %eax".to_string(),
-    //     expect: vec![0xb8, 0x44, 0x33, 0x22, 0x11],
-    // },
-    // match input.first_op {
-    // }
-
-    // ↑だと、
     let mut code: Vec<u8> = vec![];
     match instruction.rmimm_type {
-        | RMImmType::Imm_R(bit) => {
+        | RMImmType::Imm_R(imm_bit, reg_bit) => {
             let reg = Register::from_operand(instruction.second_op);
-            // TODO: ここのopcodeの生成ロジックは64bit対応する時にもう少し複雑になるはず.
+            let mut reg_bit_cp = reg_bit.clone();
+
             // emit Opecode
-            let op_code = 0xb8 + reg.index() as u8;
-            code.push(op_code);
+            let mut op_code = match reg_bit {
+                | Bit::Double => vec![0xb8 + reg.index()],
+                | Bit::Quad => match imm_bit {
+                    // レジスタは64bitで指定してあるが、即値が32bitで収まる値だった場合、
+                    // 即値を4byteでエンコードする.
+                    | Bit::Double => {
+                        reg_bit_cp = Bit::Double;
+                        vec![0x48, 0xc7, 0xc0 + reg.index()]
+                    } 
+                    | Bit::Quad => vec![0x48, 0xb8 + reg.index()],
+                    | _ => panic!("Not impement."),
+                },
+                | _ => panic!("Unimplement."),
+            };
+            code.append(&mut op_code);
 
             // emit Immediate
-            let mut imm = match bit {
+            let mut imm = match reg_bit_cp {
                 | Bit::Byte => Operand::imm_from_operand_u16(instruction.first_op)
                     .to_le_bytes()
                     .to_vec(),
                 | Bit::Double => Operand::imm_from_operand_u32(instruction.first_op)
+                    .to_le_bytes()
+                    .to_vec(),
+                | Bit::Quad => Operand::imm_from_operand_u64(instruction.first_op)
                     .to_le_bytes()
                     .to_vec(),
                 | _ => panic!("not implemented."),
@@ -273,7 +321,9 @@ fn get_rmimm_type(operands: Vec<Operand>) -> RMImmType {
             RMImmType::R_Rm(Register::from_operand(operands[0].clone()).get_bit())
         }
         | Operand::Imm(_) => {
-            RMImmType::Imm_R(Register::from_operand(operands[1].clone()).get_bit())
+            let imm_bit = Bit::to_bit(Operand::imm_from_operand_u64(operands[0].clone()));
+            let register_bit = Register::from_operand(operands[1].clone()).get_bit();
+            RMImmType::Imm_R(imm_bit, register_bit)
         }
         | _ => panic!("Unkown Operand Type: {:?}", operands[0]),
     }
@@ -293,13 +343,30 @@ fn parse_operand(input: String) -> Operand {
             }
             return match reg_name.as_str() {
                 | "eax" => Operand::Reg(Register::Eax),
+                | "ecx" => Operand::Reg(Register::Edx),
                 | "edx" => Operand::Reg(Register::Edx),
+                | "ebx" => Operand::Reg(Register::Edx),
+                | "rax" => Operand::Reg(Register::Rax),
+                | "rcx" => Operand::Reg(Register::Rcx),
+                | "rdx" => Operand::Reg(Register::Rdx),
+                | "rbx" => Operand::Reg(Register::Rbx),
                 | _ => panic!("Unknown Register Name: {:?}", reg_name),
             };
         }
         | '$' => {
-            let num_str = op_chars.collect::<String>();
-            let num: u64 = num_str.parse().unwrap();
+            let mut num_str = op_chars.collect::<String>();
+            let num: u64;
+            if num_str.contains("0x") {
+                num_str.remove_matches("0x");
+                num = u64::from_str_radix(num_str.as_str(), 16).unwrap();
+            } else {
+                num = u64::from_str_radix(num_str.as_str(), 10).unwrap_or_else(|e| {
+                    panic!(
+                        "num_str: {}, invalid. Using Unsupported prefix? err: {}",
+                        num_str, e
+                    )
+                })
+            }
             return Operand::Imm(num);
         }
         | _ => panic!("Unexpected Operand: {:?}", op_chars),
@@ -338,11 +405,10 @@ mod tests {
                 input: "ret".to_string(),
                 expect: vec![0xc3],
             },
-            // // 32bit命令, 即値
-            // AssembleTestCase{
-            //     input: "mov	$0x11223344, %eax".to_string(),
-            //     expect: vec![0xb8, 0x44, 0x33, 0x22, 0x11],
-            // },
+            AssembleTestCase {
+                input: "mov $0x11223344, %rax".to_string(),
+                expect: vec![0x48, 0xc7, 0xc0, 0x44, 0x33, 0x22, 0x11],
+            },
         ];
         for t in test_case {
             assert_eq!(assemble(t.input), t.expect)
@@ -422,6 +488,10 @@ mod tests {
                 input: "$1234".to_string(),
                 expect: Operand::Imm(1234),
             },
+            ParseOperandTestCase {
+                input: "$0x1234".to_string(),
+                expect: Operand::Imm(4660),
+            },
         ];
         for t in test_case {
             let res = parse_operand(t.input);
@@ -435,27 +505,15 @@ mod tests {
     }
     #[test]
     fn test_parse_mov() {
-        let test_case = vec![
-            ParseMovTestCase {
-                input: Instruction {
-                    typ: InstructionType::Mov,
-                    rmimm_type: RMImmType::Imm_R(Bit::Double),
-                    first_op: Operand::Imm(0x11223344),
-                    second_op: Operand::Reg(Register::Eax),
-                },
-                expect: vec![0xb8, 0x44, 0x33, 0x22, 0x11],
+        let test_case = vec![ParseMovTestCase {
+            input: Instruction {
+                typ: InstructionType::Mov,
+                rmimm_type: RMImmType::Imm_R(Bit::Double, Bit::Double),
+                first_op: Operand::Imm(0x11223344),
+                second_op: Operand::Reg(Register::Eax),
             },
-            // ParseMovTestCase {
-            //     input: Instruction {
-            //         typ: InstructionType::Mov,
-            //         rmimm_type: RMImmType::Imm_R,
-            //         first_op: Operand::Imm(0x55),
-            //         second_op: Operand::Reg(Register::Ecx),
-            //     },
-            //     expect: vec![0xb9, 0x55, 0x00, 0x00, 0x00],
-            // },
-        ];
-
+            expect: vec![0xb8, 0x44, 0x33, 0x22, 0x11],
+        }];
         for t in test_case {
             let res = parse_mov(t.input);
             assert_eq!(res, t.expect);

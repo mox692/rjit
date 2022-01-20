@@ -1,5 +1,6 @@
 #![feature(asm)]
 #![feature(with_options)]
+#![feature(string_remove_matches)]
 mod assembler;
 use assembler::Assembler;
 use clap::{App, Arg};
