@@ -156,6 +156,7 @@ pub enum InstructionType {
     Add,
     Sub,
     Int,
+    Push,
     Unknown,
 }
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -221,6 +222,7 @@ pub fn assemble(input: String) -> Vec<u8> {
         | InstructionType::Add => parse_add(instruction),
         | InstructionType::Mov => parse_mov(instruction),
         | InstructionType::Int => parse_int(instruction),
+        | InstructionType::Push => parse_push(instruction),
         | _ => panic!("unimplement."),
     }
 }
@@ -298,7 +300,39 @@ fn parse_mov(instruction: Instruction) -> Vec<u8> {
 }
 fn parse_int(instruction: Instruction) -> Vec<u8> {
     let immediate = Operand::imm_from_operand_u8(instruction.first_op);
-    return vec![0xcd, immediate]
+    return vec![0xcd, immediate];
+}
+fn parse_push(instruction: Instruction) -> Vec<u8> {
+    match instruction.first_op.clone() {
+        | Operand::Reg(r) => {
+            let b = r.get_bit();
+            match b {
+                | Bit::Quad => {
+                    vec![0x50 + Register::from_operand(instruction.first_op).index()]
+                }
+                | _ => panic!("Unimplement"),
+            }
+        }
+        | Operand::Imm(imm) => {
+            let b = Bit::to_bit(imm);
+            match b {
+                | Bit::Byte => {
+                    let mut code: Vec<u8> = vec![0x6a];
+                    let mut opcode: Vec<u8> = (imm as u8).to_le_bytes().to_vec();
+                    code.append(&mut opcode);
+                    return code;
+                }
+                | Bit::Word | Bit::Double => {
+                    let mut code: Vec<u8> = vec![0x68];
+                    let mut opcode: Vec<u8> = (imm as u32).to_le_bytes().to_vec();
+                    code.append(&mut opcode);
+                    return code;
+                }
+                | Bit::Quad => panic!("operand should be less thna 32bit value."),
+            }
+        }
+        | _ => panic!("Unimplemet..."),
+    }
 }
 
 fn parse_instruction(tok: Vec<String>) -> Instruction {
@@ -311,6 +345,7 @@ fn parse_instruction(tok: Vec<String>) -> Instruction {
         | "add" => InstructionType::Add,
         | "sub" => InstructionType::Sub,
         | "int" => InstructionType::Int,
+        | "push" => InstructionType::Push,
         | _ => panic!("Unknown Instruction, {:?}", tok[0].as_str()),
     };
 
@@ -468,6 +503,18 @@ mod tests {
             AssembleTestCase {
                 input: "int $0x80".to_string(),
                 expect: vec![0xcd, 0x80],
+            },
+            AssembleTestCase {
+                input: "push %rdx".to_string(),
+                expect: vec![0x52],
+            },
+            AssembleTestCase {
+                input: "push $0x112233".to_string(),
+                expect: vec![0x68, 0x33, 0x22, 0x11, 0x00],
+            },
+            AssembleTestCase {
+                input: "push   $0x1".to_string(),
+                expect: vec![0x6a, 0x01],
             },
         ];
         for t in test_case {

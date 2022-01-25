@@ -66,3 +66,6 @@ mov    rax,0x1122
 mov    rcx,0x1122
 0:  48 c7 c1 22 11 00 00    mov    rdx,0x1122   (c0 -> c1)
 ```
+
+TODO:
+* opcodeだけでファイルを作りたい.
