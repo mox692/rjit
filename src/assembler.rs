@@ -12,8 +12,19 @@ pub struct Assembler {
 impl Assembler {
     pub fn new(input: String) -> Self {
         let asm = input
+            // get each instruction.
             .split(|c| c == '\n' || c == ';')
-            .map(|s| s.to_string())
+            .map(|str| {
+                let mut s = str.to_string();
+                // remove comment.
+                if let Some(index) = s.find("#") {
+                    let _ = s.split_off(index);
+                }
+                // remove unnecessary whitespace.
+                s.trim().to_string()
+            })
+            // remove empty vec elements.
+            .filter(|s| !s.eq(""))
             .collect();
 
         let mmap = unsafe {
@@ -650,6 +661,54 @@ mod tests {
         for t in test_case {
             let res = parse_mov(t.input);
             assert_eq!(res, t.expect);
+        }
+    }
+
+    struct NewAsmStringTestCase {
+        input: String,
+        expect: Vec<String>,
+    }
+    #[test]
+    fn test_new_asm_string() {
+        let test_case = vec![
+            NewAsmStringTestCase {
+                input: String::from("nop;nop\nnop # sdafasdfssad\nnop;"),
+                expect: vec![
+                    "nop".to_string(),
+                    "nop".to_string(),
+                    "nop".to_string(),
+                    "nop".to_string(),
+                ],
+            },
+            NewAsmStringTestCase {
+                input: String::from("nop;nop\nnop # sdafasdfssad\nnop"),
+                expect: vec![
+                    "nop".to_string(),
+                    "nop".to_string(),
+                    "nop".to_string(),
+                    "nop".to_string(),
+                ],
+            },
+            NewAsmStringTestCase {
+                input: String::from(
+                    "
+                    mov $22, %rax
+                    mov %rax, %rdi;
+                    nop # this is test comment.
+                    syscall
+                ",
+                ),
+                expect: vec![
+                    "mov $22, %rax".to_string(),
+                    "mov %rax, %rdi".to_string(),
+                    "nop".to_string(),
+                    "syscall".to_string(),
+                ],
+            },
+        ];
+        for t in test_case {
+            let asm = Assembler::new(t.input);
+            assert_eq!(t.expect, asm.asm);
         }
     }
 }
