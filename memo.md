@@ -67,5 +67,13 @@ mov    rcx,0x1122
 0:  48 c7 c1 22 11 00 00    mov    rdx,0x1122   (c0 -> c1)
 ```
 
+* 1/25
+  * int 0x80が32bitの命令であることがわかった、のでsyscallに変更
+  * アセンブラだけでprintするのを作る
+
 TODO:
 * opcodeだけでファイルを作りたい.
+
+### syscallの仕様
+* rax -> syscall number
+* rdi, rsi, rdx, r10 -> 引数

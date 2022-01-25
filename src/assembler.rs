@@ -113,6 +113,10 @@ pub enum Register {
     Rcx,
     Rdx,
     Rbx,
+    Rsp,
+    Rbp,
+    Rsi,
+    Rdi,
 }
 impl Register {
     fn from_operand(operand: Operand) -> Self {
@@ -132,6 +136,10 @@ impl Register {
             | Register::Rcx => 1,
             | Register::Rdx => 2,
             | Register::Rbx => 3,
+            | Register::Rsp => 4,
+            | Register::Rbp => 5,
+            | Register::Rsi => 6,
+            | Register::Rdi => 7,
         }
     }
     fn get_bit(&self) -> Bit {
@@ -145,6 +153,10 @@ impl Register {
             | Register::Rcx => Bit::Quad,
             | Register::Rdx => Bit::Quad,
             | Register::Rbx => Bit::Quad,
+            | Register::Rsp => Bit::Quad,
+            | Register::Rbp => Bit::Quad,
+            | Register::Rsi => Bit::Quad,
+            | Register::Rdi => Bit::Quad,
         }
     }
 }
@@ -156,6 +168,7 @@ pub enum InstructionType {
     Add,
     Sub,
     Int,
+    Syscall,
     Push,
     Unknown,
 }
@@ -222,6 +235,7 @@ pub fn assemble(input: String) -> Vec<u8> {
         | InstructionType::Add => parse_add(instruction),
         | InstructionType::Mov => parse_mov(instruction),
         | InstructionType::Int => parse_int(instruction),
+        | InstructionType::Syscall => parse_syscall(),
         | InstructionType::Push => parse_push(instruction),
         | _ => panic!("unimplement."),
     }
@@ -302,6 +316,9 @@ fn parse_int(instruction: Instruction) -> Vec<u8> {
     let immediate = Operand::imm_from_operand_u8(instruction.first_op);
     return vec![0xcd, immediate];
 }
+fn parse_syscall() -> Vec<u8> {
+    return vec![0x0f, 0x05];
+}
 fn parse_push(instruction: Instruction) -> Vec<u8> {
     match instruction.first_op.clone() {
         | Operand::Reg(r) => {
@@ -345,6 +362,7 @@ fn parse_instruction(tok: Vec<String>) -> Instruction {
         | "add" => InstructionType::Add,
         | "sub" => InstructionType::Sub,
         | "int" => InstructionType::Int,
+        | "syscall" => InstructionType::Syscall,
         | "push" => InstructionType::Push,
         | _ => panic!("Unknown Instruction, {:?}", tok[0].as_str()),
     };
@@ -425,6 +443,10 @@ fn parse_operand(input: String) -> Operand {
                 | "rcx" => Operand::Reg(Register::Rcx),
                 | "rdx" => Operand::Reg(Register::Rdx),
                 | "rbx" => Operand::Reg(Register::Rbx),
+                | "rsp" => Operand::Reg(Register::Rsp),
+                | "rbp" => Operand::Reg(Register::Rbp),
+                | "rsi" => Operand::Reg(Register::Rsi),
+                | "rdi" => Operand::Reg(Register::Rdi),
                 | _ => panic!("Unknown Register Name: {:?}", reg_name),
             };
         }
@@ -515,6 +537,10 @@ mod tests {
             AssembleTestCase {
                 input: "push   $0x1".to_string(),
                 expect: vec![0x6a, 0x01],
+            },
+            AssembleTestCase {
+                input: "syscall".to_string(),
+                expect: vec![0x0f, 0x05],
             },
         ];
         for t in test_case {
