@@ -1,4 +1,5 @@
 use libc::{mmap, MAP_ANONYMOUS, MAP_PRIVATE, PROT_EXEC, PROT_READ, PROT_WRITE};
+use phf::phf_map;
 use std::ptr::{self};
 
 pub struct Assembler {
@@ -171,7 +172,7 @@ impl Register {
         }
     }
 }
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum InstructionType {
     Nop,
     Ret,
@@ -216,7 +217,7 @@ impl Operand {
         }
     }
 }
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Instruction {
     typ: InstructionType,
     rmimm_type: RMImmType,
@@ -235,11 +236,50 @@ impl Default for Instruction {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum AsmKind {
+    Instruction,
+    Label,
+    Directive,
+}
+
+fn dispatch(tok: Vec<String>) -> AsmKind {
+    // instructionの判定
+    if let Some(_) = parse_instruction_type(tok[0].as_str()) {
+        return AsmKind::Instruction;
+    }
+    // dirctiveの判定
+    if tok[0].chars().next().unwrap() == '.' {
+        return AsmKind::Directive;
+    }
+    // labelの判定
+    if tok[0].chars().last().unwrap() == ':' {
+        return AsmKind::Label;
+    }
+    panic!("Unknown type found, {:?}", tok)
+}
+
 // asmの1行がここに入るイメージ
 pub fn assemble(input: String) -> Vec<u8> {
     let tok = tokenize(input.clone());
-    let instruction = parse_instruction(tok);
+    // TODO: instruction以外の要素も扱う
 
+    match dispatch(tok.clone()) {
+        | AsmKind::Instruction => emit_instruction(tok),
+        | AsmKind::Label => emit_label(),
+        | AsmKind::Directive => emit_directive(),
+    }
+}
+
+fn emit_label() -> Vec<u8> {
+    return vec![];
+}
+fn emit_directive() -> Vec<u8> {
+    return vec![];
+}
+
+fn emit_instruction(tok: Vec<String>) -> Vec<u8> {
+    let instruction = parse_instruction(tok);
     match instruction.typ {
         | InstructionType::Nop => parse_nop(instruction),
         | InstructionType::Ret => parse_ret(instruction),
@@ -363,20 +403,25 @@ fn parse_push(instruction: Instruction) -> Vec<u8> {
     }
 }
 
+static INSTRUCTIONTYPEMAP: phf::Map<&'static str, InstructionType> = phf_map! {
+     "nop" => InstructionType::Nop,
+     "ret" => InstructionType::Ret,
+     "mov" => InstructionType::Mov,
+     "add" => InstructionType::Add,
+     "sub" => InstructionType::Sub,
+     "int" => InstructionType::Int,
+     "syscall" => InstructionType::Syscall,
+     "push" => InstructionType::Push,
+};
+pub fn parse_instruction_type(keyword: &str) -> Option<InstructionType> {
+    INSTRUCTIONTYPEMAP.get(keyword).cloned()
+}
+
 fn parse_instruction(tok: Vec<String>) -> Instruction {
     let tok_len = tok.len();
 
-    let typ: InstructionType = match tok[0].as_str() {
-        | "nop" => InstructionType::Nop,
-        | "ret" => InstructionType::Ret,
-        | "mov" => InstructionType::Mov,
-        | "add" => InstructionType::Add,
-        | "sub" => InstructionType::Sub,
-        | "int" => InstructionType::Int,
-        | "syscall" => InstructionType::Syscall,
-        | "push" => InstructionType::Push,
-        | _ => panic!("Unknown Instruction, {:?}", tok[0].as_str()),
-    };
+    let typ = parse_instruction_type(tok[0].as_str())
+        .unwrap_or_else(|| panic!("Unknown Instruction, {:?}", tok[0].as_str()));
 
     // instruction which does not take an operand.
     if tok_len == 1 {
@@ -433,6 +478,23 @@ fn get_rmimm_type(operands: Vec<Operand>) -> RMImmType {
     }
 }
 
+static REGISTERMAP: phf::Map<&'static str, Register> = phf_map! {
+     "eax" => (Register::Eax),
+     "ecx" => (Register::Edx),
+     "edx" => (Register::Edx),
+     "ebx" => (Register::Edx),
+     "rax" => (Register::Rax),
+     "rcx" => (Register::Rcx),
+     "rdx" => (Register::Rdx),
+     "rbx" => (Register::Rbx),
+     "rsp" => (Register::Rsp),
+     "rbp" => (Register::Rbp),
+     "rsi" => (Register::Rsi),
+     "rdi" => (Register::Rdi),
+};
+pub fn parse_register_map(reg: &str) -> Option<Register> {
+    REGISTERMAP.get(reg).cloned()
+}
 fn parse_operand(input: String) -> Operand {
     let mut op_chars = input.chars();
 
@@ -445,21 +507,7 @@ fn parse_operand(input: String) -> Operand {
                 }
                 reg_name.push(c);
             }
-            return match reg_name.as_str() {
-                | "eax" => Operand::Reg(Register::Eax),
-                | "ecx" => Operand::Reg(Register::Edx),
-                | "edx" => Operand::Reg(Register::Edx),
-                | "ebx" => Operand::Reg(Register::Edx),
-                | "rax" => Operand::Reg(Register::Rax),
-                | "rcx" => Operand::Reg(Register::Rcx),
-                | "rdx" => Operand::Reg(Register::Rdx),
-                | "rbx" => Operand::Reg(Register::Rbx),
-                | "rsp" => Operand::Reg(Register::Rsp),
-                | "rbp" => Operand::Reg(Register::Rbp),
-                | "rsi" => Operand::Reg(Register::Rsi),
-                | "rdi" => Operand::Reg(Register::Rdi),
-                | _ => panic!("Unknown Register Name: {:?}", reg_name),
-            };
+            return Operand::Reg(parse_register_map(reg_name.as_str()).unwrap()); 
         }
         | '$' => {
             let mut num_str = op_chars.collect::<String>();
@@ -709,6 +757,31 @@ mod tests {
         for t in test_case {
             let asm = Assembler::new(t.input);
             assert_eq!(t.expect, asm.asm);
+        }
+    }
+    struct DispatchTestCase {
+        input: Vec<String>,
+        expect: AsmKind,
+    }
+    #[test]
+    fn dispath_test_case() {
+        let test_case = vec![
+            DispatchTestCase {
+                input: vec!["mov".to_string(), "%rax".to_string(), "%rsp".to_string()],
+                expect: AsmKind::Instruction,
+            },
+            DispatchTestCase {
+                input: vec![".byte".to_string(), "0".to_string()],
+                expect: AsmKind::Directive,
+            },
+            DispatchTestCase {
+                input: vec!["texttt:".to_string()],
+                expect: AsmKind::Label,
+            },
+        ];
+        for t in test_case {
+            let res = dispatch(t.input);
+            assert_eq!(res, t.expect);
         }
     }
 }
